@@ -21,6 +21,8 @@ MICROSOFT_GPG_KEYS_URI="https://packages.microsoft.com/keys/microsoft.asc"
 DOCKER_MOBY_ARCHIVE_VERSION_CODENAMES="bookworm buster bullseye bionic focal jammy noble"
 DOCKER_LICENSED_ARCHIVE_VERSION_CODENAMES="bookworm buster bullseye bionic focal hirsute impish jammy noble"
 DISABLE_IP6_TABLES="${DISABLEIP6TABLES:-false}"
+CA_CERTS_MOUNT="${CACERTSMOUNT:-"false"}"
+
 
 # Default: Exit on any failure.
 set -e
@@ -500,6 +502,7 @@ set -e
 AZURE_DNS_AUTO_DETECTION=${AZURE_DNS_AUTO_DETECTION}
 DOCKER_DEFAULT_ADDRESS_POOL=${DOCKER_DEFAULT_ADDRESS_POOL}
 DOCKER_DEFAULT_IP6_TABLES=${DOCKER_DEFAULT_IP6_TABLES}
+CA_CERTS_MOUNT=${CA_CERTS_MOUNT}
 EOF
 
 tee -a /usr/local/share/docker-init.sh > /dev/null \
@@ -629,6 +632,27 @@ do
 
     retry_docker_start_count=`expr $retry_docker_start_count + 1`
 done
+
+if [ "${CA_CERTS_MOUNT}" = "true" ]; then
+    echo "(*) Configuring Buildx to trust host CA certificates..."
+    
+    # We create a new builder named 'proxy-builder'
+    # We use docker-container driver and mount the system's SSL/CA paths into the buildkit container
+    sudo_if docker buildx create \
+        --name proxy-builder \
+        --driver docker-container \
+        --use \
+        --buildkitd-flags '--allow-insecure-entitlement security.insecure' \
+        --driver-opt "env.http_proxy=$http_proxy" \
+        --driver-opt "env.https_proxy=$https_proxy" \
+        --driver-opt "env.no_proxy=$no_proxy" \
+        --driver-opt "volume=/etc/ssl/certs:/etc/ssl/certs:ro" \
+        --driver-opt "volume=/usr/local/share/ca-certificates:/usr/local/share/ca-certificates:ro" \
+        --driver-opt "volume=/etc/pki/tls/certs:/etc/pki/tls/certs:ro"
+
+    # Bootstrap it immediately so the container spins up and maps the certs
+    sudo_if docker buildx inspect proxy-builder --bootstrap
+fi
 
 # Execute whatever commands were passed in (if any). This allows us
 # to set this script to ENTRYPOINT while still executing the default CMD.

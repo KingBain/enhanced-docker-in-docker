@@ -60,6 +60,11 @@
             "type": "boolean",
             "default": false,
             "description": "Disable ip6tables (this option is only applicable for Docker versions 27 and greater)"
+        },
+        "caCertsMount": {
+            "type": "boolean",
+            "default": false,
+            "description": "Automatically mount the dev container's SSL certs into the Buildx/BuildKit builder to support corporate proxies."
         }
     },
     "entrypoint": "/usr/local/share/docker-init.sh",
